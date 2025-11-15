@@ -1,37 +1,44 @@
-# Control de un Dron DJI Tello mediante ROS 2 y WhatsApp Cloud API
+# Sistema Integrado de Control para Dron DJI Tello con ROS 2 y Extensión vía WhatsApp Cloud API
 
-Este proyecto implementa un sistema desarrollado por el autor para controlar un dron DJI Tello a través de mensajes enviados desde WhatsApp. El trabajo integra ROS 2, un servidor Flask, la API de WhatsApp Cloud de Meta y varios nodos encargados de misión, telemetría, seguridad y visualización.
+Este proyecto implementa un sistema completo desarrollado por el autor para operar un dron DJI Tello utilizando ROS 2. El sistema conforma una arquitectura modular que integra control de vuelo, telemetría, seguridad por batería, planificación automática de misiones, procesamiento de vídeo y, como extensión opcional, control remoto mediante mensajes enviados desde WhatsApp.
 
-El objetivo principal consiste en demostrar un flujo de control remoto confiable donde un usuario autorizado envía comandos mediante WhatsApp, los cuales se convierten en una misión estructurada que el dron ejecuta bajo supervisión de telemetría y lógica de seguridad. El proyecto combina robótica, servicios web y visión artificial en un único sistema cohesivo.
-
----
-
-## 1. Arquitectura del Sistema
-
-El sistema desarrollado se compone de los siguientes elementos principales:
-
-1. **WhatsApp Cloud API (Meta)** — Recibe los mensajes del usuario y los reenvía al Webhook configurado.
-2. **Servidor Flask (Webhook)** — Procesa los mensajes entrantes, los almacena en una cola FIFO y expone el endpoint `/next` para ROS 2.
-3. **Nodo MissionPlannerNode (ROS 2)** — Consulta el servidor, interpreta los mensajes como una misión y ejecuta cada paso de forma secuencial.
-4. **Nodo DroneConnectorNode** — Comunica ROS 2 con el dron, envía comandos al Tello y publica telemetría.
-5. **Nodo BatteryFailsafeNode** — Supervisa la batería y fuerza aterrizaje seguro si está baja.
-6. **Nodo VideoViewerNode** — Visualiza el vídeo del dron en tiempo real y detecta zonas de color (verde, azul y rojo).
-7. **Nodo de telemetría en terminal** — Muestra datos de forma continua (altura, batería, velocidad).
-
-El dron se comunica por WiFi y todas las interacciones se integran mediante tópicos ROS 2.
+El objetivo principal del proyecto es crear un entorno funcional y demostrativo donde múltiples nodos ROS 2 colaboran para controlar, supervisar y gestionar la operación del dron. El módulo de WhatsApp amplía el sistema permitiendo introducir misiones mediante mensajería móvil, pero es únicamente una parte del ecosistema general, cuyo núcleo es la infraestructura robótica basada en ROS 2.
 
 ---
 
-## 2. Flujo General del Sistema
+## 1. Arquitectura General del Sistema
 
-1. El usuario envía mensajes a un número de WhatsApp registrado.
-2. Meta entrega esos mensajes al Webhook en Flask.
-3. El Webhook los almacena en una cola accesible vía `/next`.
-4. El nodo de misión consulta periódicamente estos mensajes.
-5. Cuando el servidor indica que no hay más comandos, la misión se considera completa.
-6. La misión se ejecuta paso a paso mediante timers.
-7. El nodo conector envía los comandos reales al dron.
-8. La telemetría y el vídeo se publican en ROS 2 para análisis y visualización.
+El sistema se compone de los siguientes nodos principales:
+
+1. **DroneConnectorNode** — Enlace directo con el dron DJI Tello.
+   Se encarga de transmitir comandos, publicar telemetría y ofrecer el flujo de vídeo crudo.
+
+2. **TelemetryBridgeNode** — Consolida información del dron y la muestra en terminal en tiempo real.
+
+3. **BatteryFailsafeNode** — Supervisa la batería y envía aterrizaje inmediato cuando baja del umbral.
+
+4. **MissionPlannerNode** — Ejecuta una misión completa paso a paso mediante timers y condiciones.
+
+5. **VideoViewerNode** — Procesa vídeo del dron y detecta regiones verdes, azules y rojas usando OpenCV.
+
+6. **WhatsApp Mission Module (Webhook + nodo)** — Módulo externo que permite construir misiones enviando mensajes desde WhatsApp.
+   Es un complemento funcional al sistema principal, no un requisito.
+
+La interconexión entre nodos se realiza mediante tópicos ROS 2. El dron se comunica vía WiFi con el nodo conector.
+
+---
+
+## 2. Flujo de Trabajo del Sistema
+
+El funcionamiento integrado es el siguiente:
+
+1. El **DroneConnectorNode** conecta con el Tello, habilita vídeo y publica telemetría.
+2. El **TelemetryBridgeNode** muestra altura, batería y velocidad en la terminal.
+3. El **BatteryFailsafeNode** publica un estado de seguridad y fuerza aterrizaje si la batería baja del límite.
+4. El **MissionPlannerNode** ejecuta una misión automática (secuencia de takeoff, esperas, movimientos, etc.).
+5. El **VideoViewerNode** muestra el vídeo y detecta colores en tiempo real.
+6. Opcionalmente, un usuario puede enviar comandos por WhatsApp:
+   el Webhook recibe los mensajes, los almacena en una cola y el nodo de misión los convierte en pasos de vuelo.
 
 ---
 
@@ -39,92 +46,114 @@ El dron se comunica por WiFi y todas las interacciones se integran mediante tóp
 
 ### 3.1 DroneConnectorNode
 
-Implementado para:
+Nodo principal de comunicación con el dron.
+Funciones clave:
 
-* Conectar físicamente con el dron DJI Tello.
-* Activar el stream de vídeo.
-* Publicar batería, altura, velocidad y vídeo.
-* Ejecutar comandos recibidos por `/tello/command`.
+* Conexión y manejo del dron DJI Tello mediante `djitellopy`.
+* Publicación de:
 
-### 3.2 BatteryFailsafeNode
+  * `/tello/image_raw`
+  * `/tello/battery`
+  * `/tello/speed_x`
+  * `/tello/height`
+* Ejecución de comandos recibidos por `/tello/command`.
 
-Su función es garantizar seguridad:
+---
 
-* Supervisa continuamente `/tello/battery`.
+### 3.2 TelemetryBridgeNode
+
+Nodo dedicado a monitoreo local.
+Funciones:
+
+* Recibe telemetría en tiempo real.
+* Muestra estado del dron en un panel de consola.
+* Permite supervisar el vuelo sin interfaz gráfica.
+
+---
+
+### 3.3 BatteryFailsafeNode
+
+Módulo de seguridad obligatorio.
+Funciones:
+
+* Supervisa `/tello/battery`.
 * Publica `/tello/safety_status`.
-* Si el nivel baja del umbral, envía el comando `land`.
-
-### 3.3 MissionPlannerNode (nodo principal de misión)
-
-* Consulta la cola de comandos proveniente de WhatsApp.
-* Construye una misión secuencial.
-* Ejecuta cada paso usando timers.
-* Publica comandos al dron y espera condiciones como pausas o altura mínima.
-
-### 3.4 VideoViewerNode
-
-* Recibe vídeo desde `/tello/image_raw`.
-* Convierte formatos de imagen.
-* Detecta colores mediante umbrales HSV.
-* Muestra el vídeo en directo.
-
-### 3.5 Nodo de telemetría en terminal
-
-* Presenta continuamente la información clave del dron.
+* En caso de batería baja, envía `land` y evita seguir misiones.
 
 ---
 
-## 4. Webhook de WhatsApp
+### 3.4 MissionPlannerNode
 
-Para permitir el control vía WhatsApp, el autor configuró:
+Controlador secuencial de misiones.
+Características:
 
-* Una aplicación en Meta for Developers.
-* Un número de prueba y probadores autorizados.
-* Un Webhook público (ngrok).
-* Validación automática mediante `hub.challenge`.
-
-Los mensajes se almacenan en una cola FIFO y se consumen desde ROS 2.
+* Ejecuta una lista ordenada de comandos: delays, movimientos, esperas.
+* Emplea timers como mecanismo de máquina de estados.
+* Depende del estado de seguridad publicado por el failsafe.
 
 ---
 
-## 5. Instalación y Ejecución
+### 3.5 VideoViewerNode (Procesador de Cámara)
 
-### 5.1 Requisitos
+Procesamiento de vídeo en tiempo real.
+Funciones:
+
+* Conversión segura de formatos ROS a BGR.
+* Detección de colores verde, azul y rojo mediante HSV.
+* Visualización en ventana OpenCV.
+
+---
+
+### 3.6 Módulo de WhatsApp (opcional pero destacado)
+
+Extensión desarrollada por el autor para controlar misiones vía mensajería móvil.
+Flujo:
+
+1. WhatsApp → Meta → Webhook Flask.
+2. Webhook → Cola FIFO accesible vía `/next`.
+3. MissionPlannerNode extrae comandos y construye la misión.
+4. El dron ejecuta la misión como si fuera una misión local estándar.
+
+Este módulo no sustituye el control ROS 2, sino que lo complementa de forma remota.
+
+---
+
+## 4. Instalación y Uso
+
+### Requisitos
 
 * ROS 2 Humble
 * Python 3.8+
-* OpenCV y cv_bridge
-* Docker (opcional para aislar el nodo WhatsApp)
-* Cuenta en Meta for Developers con WhatsApp Cloud API
+* OpenCV + cv_bridge
 * DJI Tello
+* (Opcional) Meta for Developers + WhatsApp Cloud API
+* (Opcional) Docker para ejecutar el webhook
 
-### 5.2 Clonado del repositorio
+### Clonado del repositorio
 
 ```
 git clone https://github.com/ani-m-al/WSN_Proyecto1/
 cd WSN_Proyecto1
 ```
 
-### 5.3 Compilación
+### Compilación
 
 ```
 colcon build
 source install/setup.bash
 ```
 
-### 5.4 Ejecución de los nodos
-
-En terminales separadas:
+### Ejecución de los nodos principales
 
 ```
 ros2 run tello_pkg drone_connector_node
+ros2 run tello_pkg telemetry_bridge_node
 ros2 run tello_pkg battery_failsafe_node
 ros2 run tello_pkg mission_planner_node
 ros2 run tello_pkg video_viewer_node
-ros2 run tello_pkg telemetry_bridge_node
 ```
 
-Si se usa el servidor Flask:
+### Servidor WhatsApp (opcional)
 
 ```
 python3 server/webhook.py
@@ -132,24 +161,19 @@ python3 server/webhook.py
 
 ---
 
-## 6. Motivación y Alcance
+## 5. Alcance del Proyecto
 
-El autor desarrolló este proyecto para demostrar una integración práctica entre:
+Este trabajo demuestra una integración completa entre:
 
-* Robótica aérea con ROS 2
-* Servicios cloud modernos (Webhook)
-* Control remoto mediante WhatsApp
-* Procesamiento de vídeo para detección básica de color
+* Robótica aérea (DJI Tello + ROS 2)
+* Comunicación entre nodos ROS 2
+* Seguridad en vuelo mediante failsafe
+* Procesamiento visual
+* Automatización de misiones
+* Control remoto ampliado vía WhatsApp
 
-Este trabajo permite tanto experimentación académica como extensión hacia sistemas más avanzados de teleoperación y automatización.
+Se trata de un sistema extensible y modular pensado para investigación, docencia y experimentación con robótica conectada a servicios cloud.
 
 ---
-
-## 7. Licencia
-
-El repositorio puede incluir la licencia especificada por el autor (MIT recomendada).
-
-
-
-
-Solo indícalo.
+* Un diagrama ASCII o Mermaid para la arquitectura,
+* O una versión bilingüe español/inglés.
