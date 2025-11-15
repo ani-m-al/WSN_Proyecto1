@@ -1,6 +1,6 @@
 # Sistema Integrado de Control para Dron DJI Tello con ROS 2 y Extensión vía WhatsApp Cloud API
 
-Este proyecto implementa un sistema completo desarrollado por el autor para operar un dron DJI Tello utilizando ROS 2. El sistema conforma una arquitectura modular que integra control de vuelo, telemetría, seguridad por batería, planificación automática de misiones, procesamiento de vídeo y, como extensión opcional, control remoto mediante mensajes enviados desde WhatsApp.
+Este proyecto implementa un sistema completo para operar un dron DJI Tello utilizando ROS 2. El sistema conforma una arquitectura modular que integra control de vuelo, telemetría, seguridad por batería, planificación automática de misiones, procesamiento de vídeo y, como extensión opcional, control remoto mediante mensajes enviados desde WhatsApp.
 
 El objetivo principal del proyecto es crear un entorno funcional y demostrativo donde múltiples nodos ROS 2 colaboran para controlar, supervisar y gestionar la operación del dron. El módulo de WhatsApp amplía el sistema permitiendo introducir misiones mediante mensajería móvil, pero es únicamente una parte del ecosistema general, cuyo núcleo es la infraestructura robótica basada en ROS 2.
 
@@ -173,7 +173,3 @@ Este trabajo demuestra una integración completa entre:
 * Control remoto ampliado vía WhatsApp
 
 Se trata de un sistema extensible y modular pensado para investigación, docencia y experimentación con robótica conectada a servicios cloud.
-
----
-* Un diagrama ASCII o Mermaid para la arquitectura,
-* O una versión bilingüe español/inglés.
